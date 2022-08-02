@@ -1,19 +1,20 @@
 package main
 
 import (
+	"DRL-scheduler/pkg/plugin"
 	"fmt"
-	"github.com/lwabish/k8s-scheduler/pkg/mem"
-	"k8s.io/component-base/logs"
-	"k8s.io/kubernetes/cmd/kube-scheduler/app"
 	"math/rand"
 	"os"
 	"time"
+
+	"k8s.io/component-base/logs"
+	"k8s.io/kubernetes/cmd/kube-scheduler/app"
 )
 
 func main() {
 	rand.Seed(time.Now().UnixNano())
 	command := app.NewSchedulerCommand(
-		app.WithPlugin(mem.Name, mem.New),
+		app.WithPlugin(plugin.Name, plugin.New),
 	)
 
 	logs.InitLogs()
