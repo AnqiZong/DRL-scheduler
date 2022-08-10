@@ -1,12 +1,12 @@
 package main
 
 import (
-	"DRL-scheduler/pkg/plugin"
 	"fmt"
 	"math/rand"
 	"os"
 	"time"
 
+	"github.com/AnqiZong/DRL-scheduler/pkg/plugin"
 	"k8s.io/component-base/logs"
 	"k8s.io/kubernetes/cmd/kube-scheduler/app"
 )

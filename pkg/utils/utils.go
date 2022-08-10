@@ -1,12 +1,13 @@
 package utils
 
 import (
-	"github.com/thedevsaddam/gojsonq/v2"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 	"math"
 	"os"
 	"strconv"
+
+	"github.com/thedevsaddam/gojsonq/v2"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 func Sigmoid(x float64) float64 {
@@ -34,4 +35,12 @@ func GetClientConfig() (*rest.Config, error) {
 		}
 	}
 	return config, nil
+}
+
+// 自定义三目运算符函数
+func Ternary(a bool, b, c float64) float64 {
+	if a {
+		return b
+	}
+	return c
 }

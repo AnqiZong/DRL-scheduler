@@ -1,8 +1,8 @@
 package plugin
 
 import (
-	"DRL-scheduler/pkg/utils"
-
+	"github.com/AnqiZong/DRL-scheduler/pkg/dqn"
+	"github.com/AnqiZong/DRL-scheduler/pkg/utils"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/kubernetes/pkg/scheduler/framework"
 	runtime2 "k8s.io/kubernetes/pkg/scheduler/framework/runtime"
@@ -11,15 +11,22 @@ import (
 
 const Name = "DRLScheduler"
 
-type promarg struct {
-	PrometheusC string `json:"prometheus_address,omitempty"`
+type Promarg struct {
+	PrometheusAddr string `json:"prometheus_address,omitempty"`
 }
-
+type DQNArgs struct {
+	agent *Agent,
+	state *tensor.Dense
+	reward float64,
+	action string,
+	nextState *tensor.Dense
+}
 type DRLSchedulerPluginArg struct {
-	PrometheusClient *utils.promClient // 建立Prometheus client
+	PrometheusClient utils.PromClient // 建立Prometheus client
 	//	PrometheusC      string `json:"prometheus_endpoint,omitempty"`
 	//	MaxMemory        int    `json:"max_memory,omitempty"`
 	MetricsClientSet *metricsClientSet.Clientset // prometheus未安装时的 metriccs client
+	DQNargs *DQNArgs
 }
 
 type DRLSchedulerPlugin struct {
@@ -59,9 +66,12 @@ func (n DRLSchedulerPlugin) Name() string {
 
 func New(configuration runtime.Object, f framework.Handle) (framework.Plugin, error) {
 	args := &DRLSchedulerPluginArg{}
-	promarg := &promarg{}
+	promarg := &Promarg{}
 	err := runtime2.DecodeInto(configuration, promarg)
-	args.PrometheusClient = utils.NewPromClient(promarg)
+	if err != nil {
+		return nil, err
+	}
+	args.PrometheusClient, _ = utils.NewPromClient(promarg.PrometheusAddr)
 	// 获取K8S .kube/config配置信息
 	config, err := utils.GetClientConfig()
 	if err != nil {
@@ -72,7 +82,7 @@ func New(configuration runtime.Object, f framework.Handle) (framework.Plugin, er
 		return nil, err
 	}
 	args.MetricsClientSet = mcs
-
+	args.DQNargs.agent = dqn.NewAgent(deepq.DefaultAgentConfig)
 	return &DRLSchedulerPlugin{
 		handle: f,
 		args:   *args,
