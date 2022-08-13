@@ -88,12 +88,6 @@ func NewAgent(c *AgentConfig) (*Agent, error) {
 	if c == nil {
 		c = DefaultAgentConfig
 	}
-	// if c.Base == nil {
-	// 	c.Base = DefaultAgentConfig.Base
-	// }
-	// if env == nil {
-	// 	return nil, fmt.Errorf("environment cannot be nil")
-	// }
 	if c.Epsilon == nil {
 		c.Epsilon = common.DefaultDecaySchedule()
 	}
@@ -106,16 +100,13 @@ func NewAgent(c *AgentConfig) (*Agent, error) {
 	if err != nil {
 		return nil, err
 	}
-	//c.Base.Tracker.TrackValue("epsilon", c.Epsilon.Initial())
 	return &Agent{
-		//Base:              c.Base,
 		Hyperparameters: c.Hyperparameters,
 		memory:          NewMemory(),
 		Policy:          policy,
 		TargetPolicy:    targetPolicy,
 		Epsilon:         c.Epsilon,
 		epsilon:         c.Epsilon.Initial(),
-		//env:               env,
 		updateTargetSteps: c.UpdateTargetSteps,
 		batchSize:         c.PolicyConfig.BatchSize,
 	}, nil
@@ -189,45 +180,41 @@ func (a *Agent) updateTarget() error {
 }
 
 // Action selects the best known action for the given state.
-func (a *Agent) Action(state *tensor.Dense, optAction []int) (action int, err error) {
-	a.steps++
+func (a *Agent) Action(scoreslistLen int) (action int, err error) {
+	//a.steps++
 	a.Tracker.TrackValue("epsilon", a.epsilon)
 	if num.RandF32(0.0, 1.0) < a.epsilon {
 		// explore
-		action, err = a.RandomSampleAction(optAction)
+		action, err = a.RandomSampleAction(scoreslistLen)
 		if err != nil {
 			return
 		}
 		return
 	}
-	action, err = a.action(state)
-	return
+	return -1,nil
 }
 
 //  对不可选动作进行屏蔽，随机选择可部署动作
-func (a *Agent) RandomSampleAction(optAction []int) (action int, err error) {
+func (a *Agent) RandomSampleAction(scoreslistLen int) (action int, err error) {
 	rand.Seed(time.Now().Unix()) // unix 时间戳，秒
-	action = -1
-	for action != -1 && optAction[action] != 1 {
-		action = rand.Intn(len(optAction))
-	}
+	action = rand.Intn(scoreslistLen)
 	return action, nil
 }
 
-func (a *Agent) action(state *tensor.Dense) (action int, err error) {
-	prediction, err := a.Policy.Predict(state)
-	if err != nil {
-		return
-	}
-	qValues := prediction.(*tensor.Dense)
-	log.Debugv("qvalues", qValues)
-	actionIndex, err := qValues.Argmax(1)
-	if err != nil {
-		return action, err
-	}
-	action = actionIndex.GetI(0)
-	return
-}
+// func (a *Agent) action(state *tensor.Dense) (action int, err error) {
+// 	prediction, err := a.Policy.Predict(state)
+// 	if err != nil {
+// 		return
+// 	}
+// 	qValues := prediction.(*tensor.Dense)
+// 	log.Debugv("qvalues", qValues)
+// 	actionIndex, err := qValues.Argmax(1)
+// 	if err != nil {
+// 		return action, err
+// 	}
+// 	action = actionIndex.GetI(0)
+// 	return
+// }
 
 // Remember an event.
 func (a *Agent) Remember(event *Event) {

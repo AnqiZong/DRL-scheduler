@@ -17,7 +17,7 @@ type Event struct {
 	// State by which the action was taken.
 	State *tensor.Dense
 	// 选取的节点名称
-	Action string
+	Action int
 	// 获取的奖励
 	Reward float64
 	// 该event 在队列中的序号
@@ -25,8 +25,8 @@ type Event struct {
 }
 
 // NewEvent returns a new event
-func NewEvent(state *tensor.Dense, action string, reward float64, nextState *tensor.Dense) Event {
-	return Event{
+func NewEvent(state *tensor.Dense, action int, reward float64, nextState *tensor.Dense) *Event {
+	return &Event{
 		State:     state,
 		Action:    action,
 		NextState: nextState,

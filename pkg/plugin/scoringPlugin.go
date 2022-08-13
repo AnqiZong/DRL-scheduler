@@ -1,68 +1,165 @@
 package plugin
 
 import (
+	"context"
+	v1 "k8s.io/api/core/v1"
 	"github.com/AnqiZong/DRL-scheduler/pkg/dqn"
+	"github.com/AnqiZong/DRL-scheduler/pkg/common"
 	"github.com/AnqiZong/DRL-scheduler/pkg/utils"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/kubernetes/pkg/scheduler/framework"
 	runtime2 "k8s.io/kubernetes/pkg/scheduler/framework/runtime"
 	metricsClientSet "k8s.io/metrics/pkg/client/clientset/versioned"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"gorgonia.org/tensor"
 )
-
-const Name = "DRLScheduler"
-
+//  定义使用到的常量字符串
+const (
+	Name = "DRLScheduler"
+	preScoreStateKey = "PreScore" + Name
+)
+//  定义连接prometheus 使用的参数，该值从配置文件获取
 type Promarg struct {
 	PrometheusAddr string `json:"prometheus_address,omitempty"`
 }
+//  保存相同服务的冲突值
+type ServiceRole struct{
+	roleName string,
+	values []float64
+}
+// 服务名 从标签中获取该信息
+type Service struct {
+	serviceName string,
+	roles []ServiceRole
+}
+//  定义DQN能够使用到的参数
 type DQNArgs struct {
-	agent *Agent,
 	state *tensor.Dense
 	reward float64,
-	action string,
-	nextState *tensor.Dense
+	action int,
+	nextState *tensor.Dense,
+	//  定义神经网络的输出与nodeName之间的映射
+	nodeMap map[string]int
 }
+// DRLScheduler 配置文件参数
 type DRLSchedulerPluginArg struct {
 	PrometheusClient utils.PromClient // 建立Prometheus client
-	//	PrometheusC      string `json:"prometheus_endpoint,omitempty"`
-	//	MaxMemory        int    `json:"max_memory,omitempty"`
 	MetricsClientSet *metricsClientSet.Clientset // prometheus未安装时的 metriccs client
-	DQNargs *DQNArgs
 }
-
+// DRLSchedulerPlugin 使用的参数
 type DRLSchedulerPlugin struct {
-	handle framework.Handle
-	args   DRLSchedulerPluginArg
+	handle framework.Handle,
+	args   DRLSchedulerPluginArg,
+	DQNargs DQNArgs,
+	agent Agent,
+	Services []Service
 }
 
-func (n DRLSchedulerPlugin) Name() string {
+func (n *DRLSchedulerPlugin) Name() string {
 	return Name
 }
+// 在PreScore阶段，完成状态的保存、神经网络的训练，并计算出所有动作的Q值保存到数组中，供Score阶段使用
+func (n *DRLSchedulerPlugin) PreScore(ctx context.Context, cycleState *framework.CycleState, pod *v1.Pod, nodes []*v1.Node) *framework.Status {
+	if len(nodes) == 0 {
+		return nil
+	}
+	// 获取当前状态将前执行的步骤保存,并训练神经网络
+	if action != -1{
+		nextState := n.PrometheusClient.QueryClusterMetrics(v1.Nodes().List(context.TODO(), metav1.ListOptions{}))
+		n.agent.Remember(new dqn.Event(n.DQNArgs.state,n.DQNArgs.action,n.DQNArgs.reward,nextState))
+		n.DQNArgs.state = nextState  
+		err = n.agent.Learn() // 训练神经网络
+		require.NoError(err)
+	}else{
+		n.DQNArgs.state = n.PrometheusClient.QueryClusterMetrics(v1.Nodes().List(context.TODO(), metav1.ListOptions{}))
+	}
+	// 获取预测的qValues
+	prediction, err := n.agent.Policy.Predict(n.DQNArgs.state)
+	require.NoError(err)
+	// 把获取的qValues 保存
+	cycleState.Write(preScoreStateKey, prediction)
+	return nil
+}
 
-// func (n DRLSchedulerPlugin) Score(_ context.Context, _ *framework.CycleState, _ *v1.Pod, nodeName string) (int64, *framework.Status) {
-// 	var nodeMemory int64
-// 	if n.args.PrometheusEndpoint == "" {
-// 		used, err := n.getNodeUsedMemory(nodeName)
-// 		if err != nil {
-// 			return 0, framework.AsStatus(err)
-// 		}
-// 		nodeInfo, err := n.handle.SnapshotSharedLister().NodeInfos().Get(nodeName)
-// 		if err != nil {
-// 			return 0, framework.AsStatus(err)
-// 		}
-// 		nodeMemory = nodeInfo.Allocatable.Memory - used
-// 	} else {
-// 		nm, err := n.getDRLScheduler(nodeName)
-// 		nodeMemory = nm
-// 		if err != nil {
-// 			return 0, framework.AsStatus(err)
-// 		}
-// 	}
-// 	normalized := utils.NormalizationMem(int64(n.args.MaxMemory*1024*1024*1024), nodeMemory)
-// 	sigmoid := utils.Sigmoid(normalized)
-// 	score := int64(math.Round(sigmoid * 100))
-// 	klog.Infof("node %s counting detail:available %v normalized %v, sigmoid %v, score %v", nodeName, nodeMemory, normalized, sigmoid, score)
-// 	return score, nil
-// }
+func (n *DRLSchedulerPlugin) Score(ctx context.Context, state *framework.CycleState, pod *v1.Pod, nodeName string) (int64, *framework.Status) {
+	index := n.DQNargs.nodeMap[nodeName]
+	prediction , err := state.Read(preScoreStateKey)
+	if err != nil {
+		return 0, framework.AsStatus(fmt.Errorf("reading %q from cycleState: %w", preScoreStateKey, err))
+	}
+
+	qValues, ok := prediction.(*tensor.Dense)
+	if !ok {
+		return 0, framework.AsStatus(fmt.Errorf("cannot convert saved state to tensor.Dense"))
+	}
+	return int64(qValues.At(index)),nil
+}
+
+func (n *DRLSchedulerPlugin) NormalizeScore(ctx context.Context, state *framework.CycleState, pod *v1.Pod, scores framework.NodeScoreList) *framework.Status {
+	var maxScore int64 = -math.MaxInt64
+	var maxIndex int64 = -1
+	for i := range scores {
+		score := scores[i].Score
+		if score > maxScore {
+			maxScore = score
+			maxIndex = i
+		}
+	}
+	index,err := n.agent.Action(len(scores))
+	if err != nil {
+		return framework.AsStatus(fmt.Errorf("sampling index of actions : %w", err))
+	}
+	// 如果是随机选择的动作，修改动作对应的分数为最大值+5
+	if index != -1{
+		maxScore += 5
+		maxIndex = index
+		scores[index].Score = maxScore
+	}
+	n.DQNargs.action = n.DQNargs.nodeMap[scores[maxIndex].Name]
+	n.DQNargs.reward = dqn.GetReward(n.DQNargs.state,n.services,pod)
+	serviceName,ok := pod.ObjectMeta.Labels["servicename"]
+	if !ok {
+		return framework.AsStatus(fmt.Errorf("the pod doesn't have servicename Label: %w", err))
+	}
+	serviceIndex := -1
+	for i := range len(n.Services){
+		if n.Services[i].serviceName == serviceName{
+			serviceIndex = i
+			break
+		}
+	}
+	if serviceIndex == -1{
+		tmp := new(Service)
+		tmp.Name = serviceName
+		tmp.roles = make([]ServiceRole)
+		append(n.Services,tmp)
+		serviceIndex = len(n.Services)-1
+	}
+	roleName := pod.ObjectMeta.Labels["rolename"]
+	roleIndex = -1
+	for i := range n.Services[serviceIndex] {
+		if n.Services[serviceIndex].roleName == roleName{
+			roleIndex = i
+			break
+		}
+	}
+	if roleIndex == -1{
+		tmp := new(ServiceRole)
+		tmp.roleName = roleName
+		tmp.values = make([]float64)
+		append(n.Services[serviceIndex],tmp)
+		roleIndex = len(n.Services[serviceIndex])-1
+	}
+	append(n.Services[serviceIndex].values[roleIndex],n.DQNargs.reward)
+	for i := range scores {
+		scores[i].Score =  int64(scores[i].Score / maxScore * 100)
+	}
+	return nil
+}
+
+func (n *DRLSchedulerPlugin) ScoreExtensions() framework.ScoreExtensions {
+	return n
+}
 
 func New(configuration runtime.Object, f framework.Handle) (framework.Plugin, error) {
 	args := &DRLSchedulerPluginArg{}
@@ -82,46 +179,30 @@ func New(configuration runtime.Object, f framework.Handle) (framework.Plugin, er
 		return nil, err
 	}
 	args.MetricsClientSet = mcs
-	args.DQNargs.agent = dqn.NewAgent(deepq.DefaultAgentConfig)
+	agent := dqn.NewAgent(dqn.DefaultAgentConfig)
+	dqnargs := &DQNArgs{}
+	var services []Service 
+	nodeList, err := v1.Nodes().List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		panic(err)
+	}
+	dqnargs.nodeMap = make(map[string]int, len(nodeList))
+	index int = 0;
+	for _, node := range nodeList.Items {
+		dqnargs.nodeMap[node.Name] = index
+		index++
+	}
+	dqnargs.action = -1
+	dqnargs.reward = 0.0
 	return &DRLSchedulerPlugin{
 		handle: f,
 		args:   *args,
+		DQNargs: *dqnargs,
+		agent: agent,
+		Services: services
 	}, nil
+} 
+
+func (n *DRLSchedulerPlugin) ScoreExtensions() framework.ScoreExtensions {
+	return n
 }
-
-// func (n *DRLSchedulerPlugin) ScoreExtensions() framework.ScoreExtensions {
-// 	return nil
-// }
-
-// getNodeUsedMemory 输入节点名称，输出节点已用内存量
-// func (n *DRLSchedulerPlugin) getNodeUsedMemory(nodeName string) (int64, error) {
-// 	nodeMetrics, err := n.args.MetricsClientSet.MetricsV1beta1().NodeMetricses().Get(context.TODO(), nodeName, metaV1.GetOptions{})
-// 	if err != nil {
-// 		return 0, err
-// 	}
-// 	return nodeMetrics.Usage.Memory().Value(), nil
-// }
-
-// GetDRLScheduler 输入节点名称，获取该节点的可用内存量（从prometheus获取）
-// func (n *DRLSchedulerPlugin) getDRLScheduler(nodeName string) (int64, error) {
-// 	queryString := fmt.Sprintf("node_memory_MemAvailable_bytes{kubernetes_node=\"%s\"}", nodeName)
-// 	r, err := http.Get(fmt.Sprintf("http://%s/api/v1/query?query=%s", n.args.PrometheusEndpoint, queryString))
-// 	if err != nil {
-// 		return 0, err
-// 	}
-// 	defer func(Body io.ReadCloser) {
-// 		err = Body.Close()
-// 		if err != nil {
-// 			panic(err)
-// 		}
-// 	}(r.Body)
-// 	jsonString, err := ioutil.ReadAll(r.Body)
-// 	if err != nil {
-// 		return 0, err
-// 	}
-// 	nodeMemory, err := utils.ParseNodeMemory(string(jsonString))
-// 	if err != nil {
-// 		return 0, err
-// 	}
-// 	return nodeMemory, nil
-// }

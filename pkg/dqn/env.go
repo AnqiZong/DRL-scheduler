@@ -157,14 +157,14 @@ func (e *Env) Step(value int) (*Outcome, error) {
 }
 
 // SampleAction returns a sample action for the environment.
-func (e *Env) SampleAction() (int, error) {
-	ctx := context.Background()
-	resp, err := e.Client.SampleAction(ctx, &spherev1alpha.SampleActionRequest{Id: e.Id})
-	if err != nil {
-		return 0, err
-	}
-	return int(resp.Value), nil
-}
+// func (e *Env) SampleAction() (int, error) {
+// 	ctx := context.Background()
+// 	resp, err := e.Client.SampleAction(ctx, &spherev1alpha.SampleActionRequest{Id: e.Id})
+// 	if err != nil {
+// 		return 0, err
+// 	}
+// 	return int(resp.Value), nil
+// }
 
 // Render the environment.
 // TODO: should maybe be a stream.
@@ -187,76 +187,76 @@ type InitialState struct {
 }
 
 // Reset the environment.
-func (e *Env) Reset() (init *InitialState, err error) {
-	ctx := context.Background()
-	resp, err := e.Client.ResetEnv(ctx, &spherev1alpha.ResetEnvRequest{Id: e.Id})
-	if err != nil {
-		return nil, err
-	}
-	observation := resp.Observation.Dense()
-	var goal *tensor.Dense
-	if resp.GetGoal().Data != nil {
-		goal = resp.GetGoal().Dense()
-	}
-	if e.Normalizer != nil {
-		observation, err = e.Normalizer.Norm(observation)
-		if err != nil {
-			return nil, err
-		}
-	}
-	if e.GoalNormalizer != nil {
-		if goal != nil {
-			goal, err = e.GoalNormalizer.Norm(goal)
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-	return &InitialState{Observation: observation, Goal: goal}, nil
-}
+// func (e *Env) Reset() (init *InitialState, err error) {
+// 	ctx := context.Background()
+// 	resp, err := e.Client.ResetEnv(ctx, &spherev1alpha.ResetEnvRequest{Id: e.Id})
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	observation := resp.Observation.Dense()
+// 	var goal *tensor.Dense
+// 	if resp.GetGoal().Data != nil {
+// 		goal = resp.GetGoal().Dense()
+// 	}
+// 	if e.Normalizer != nil {
+// 		observation, err = e.Normalizer.Norm(observation)
+// 		if err != nil {
+// 			return nil, err
+// 		}
+// 	}
+// 	if e.GoalNormalizer != nil {
+// 		if goal != nil {
+// 			goal, err = e.GoalNormalizer.Norm(goal)
+// 			if err != nil {
+// 				return nil, err
+// 			}
+// 		}
+// 	}
+// 	return &InitialState{Observation: observation, Goal: goal}, nil
+// }
 
 // Close the environment.
-func (e *Env) Close() error {
-	ctx := context.Background()
-	resp, err := e.Client.DeleteEnv(ctx, &spherev1alpha.DeleteEnvRequest{Id: e.Id})
-	if err != nil {
-		return err
-	}
-	e.logger.Success(resp.Message)
-	return nil
-}
+// func (e *Env) Close() error {
+// 	ctx := context.Background()
+// 	resp, err := e.Client.DeleteEnv(ctx, &spherev1alpha.DeleteEnvRequest{Id: e.Id})
+// 	if err != nil {
+// 		return err
+// 	}
+// 	e.logger.Success(resp.Message)
+// 	return nil
+// }
 
 // Results from an environment run.
-type Results struct {
-	// Episodes is a map of episode id to result.
-	Episodes map[int32]*spherev1alpha.EpisodeResult
+// type Results struct {
+// 	// Episodes is a map of episode id to result.
+// 	Episodes map[int32]*spherev1alpha.EpisodeResult
 
-	// Videos is a map of episode id to result.
-	Videos map[int32]*spherev1alpha.Video
+// 	// Videos is a map of episode id to result.
+// 	Videos map[int32]*spherev1alpha.Video
 
-	// AverageReward is the average reward of the episodes.
-	AverageReward float32
-}
+// 	// AverageReward is the average reward of the episodes.
+// 	AverageReward float32
+// }
 
 // Results results for the environment.
-func (e *Env) Results() (*Results, error) {
-	ctx := context.Background()
-	resp, err := e.Client.Results(ctx, &spherev1alpha.ResultsRequest{Id: e.Id})
-	if err != nil {
-		return nil, err
-	}
-	var cumulative float32
-	for _, res := range resp.EpisodeResults {
-		cumulative += res.Reward
-	}
-	avg := cumulative / float32(len(resp.EpisodeResults))
-	res := &Results{
-		Episodes:      resp.EpisodeResults,
-		Videos:        resp.Videos,
-		AverageReward: avg,
-	}
-	return res, nil
-}
+// func (e *Env) Results() (*Results, error) {
+// 	ctx := context.Background()
+// 	resp, err := e.Client.Results(ctx, &spherev1alpha.ResultsRequest{Id: e.Id})
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	var cumulative float32
+// 	for _, res := range resp.EpisodeResults {
+// 		cumulative += res.Reward
+// 	}
+// 	avg := cumulative / float32(len(resp.EpisodeResults))
+// 	res := &Results{
+// 		Episodes:      resp.EpisodeResults,
+// 		Videos:        resp.Videos,
+// 		AverageReward: avg,
+// 	}
+// 	return res, nil
+// }
 
 // PrintResults results for the environment.
 func (e *Env) PrintResults() error {
@@ -371,102 +371,102 @@ func (e *Env) End() {
 // }
 
 // MaxSteps that can be taken per episode.
-func (e *Env) MaxSteps() int {
-	return int(e.MaxEpisodeSteps)
-}
+// func (e *Env) MaxSteps() int {
+// 	return int(e.MaxEpisodeSteps)
+// }
 
 // ActionSpaceShape is the shape of the action space.
 // TODO: should this be in the API of off the generated code?
-func (e *Env) ActionSpaceShape() []int {
-	return SpaceShape(e.ActionSpace)
-}
+// func (e *Env) ActionSpaceShape() []int {
+// 	return SpaceShape(e.ActionSpace)
+// }
 
-// ObservationSpaceShape is the shape of the observation space.
-func (e *Env) ObservationSpaceShape() []int {
-	if len(e.reshape) != 0 {
-		return e.reshape
-	}
-	return SpaceShape(e.ObservationSpace)
-}
+// // ObservationSpaceShape is the shape of the observation space.
+// func (e *Env) ObservationSpaceShape() []int {
+// 	if len(e.reshape) != 0 {
+// 		return e.reshape
+// 	}
+// 	return SpaceShape(e.ObservationSpace)
+// }
 
 // SpaceShape return the shape of the given space.
-func SpaceShape(space *spherev1alpha.Space) []int {
-	shape := []int{}
-	switch s := space.GetInfo().(type) {
-	case *spherev1alpha.Space_Box:
-		shape = num.I32SliceToI(s.Box.GetShape())
-	case *spherev1alpha.Space_Discrete:
-		shape = []int{1}
-	case *spherev1alpha.Space_MultiDiscrete:
-		shape = []int{len(s.MultiDiscrete.DiscreteSpaces)}
-	case *spherev1alpha.Space_MultiBinary:
-		shape = []int{int(s.MultiBinary.GetN())}
-	case *spherev1alpha.Space_StructSpace:
-		log.Fatalf("struct space not supported")
-	default:
-		log.Fatalf("unknown action space type: %v", space)
-	}
-	if len(shape) == 0 {
-		log.Fatalf("space had no shape: %v", space)
-	}
-	return shape
-}
+// func SpaceShape(space *spherev1alpha.Space) []int {
+// 	shape := []int{}
+// 	switch s := space.GetInfo().(type) {
+// 	case *spherev1alpha.Space_Box:
+// 		shape = num.I32SliceToI(s.Box.GetShape())
+// 	case *spherev1alpha.Space_Discrete:
+// 		shape = []int{1}
+// 	case *spherev1alpha.Space_MultiDiscrete:
+// 		shape = []int{len(s.MultiDiscrete.DiscreteSpaces)}
+// 	case *spherev1alpha.Space_MultiBinary:
+// 		shape = []int{int(s.MultiBinary.GetN())}
+// 	case *spherev1alpha.Space_StructSpace:
+// 		log.Fatalf("struct space not supported")
+// 	default:
+// 		log.Fatalf("unknown action space type: %v", space)
+// 	}
+// 	if len(shape) == 0 {
+// 		log.Fatalf("space had no shape: %v", space)
+// 	}
+// 	return shape
+// }
 
 // PotentialsShape is an overloaded method that will return a dense tensor of potentials for a given space.
-func PotentialsShape(space *spherev1alpha.Space) []int {
-	shape := []int{}
-	switch s := space.GetInfo().(type) {
-	case *spherev1alpha.Space_Box:
-		shape = num.I32SliceToI(s.Box.GetShape())
-	case *spherev1alpha.Space_Discrete:
-		shape = []int{int(s.Discrete.N)}
-	case *spherev1alpha.Space_MultiDiscrete:
-		shape = num.I32SliceToI(s.MultiDiscrete.DiscreteSpaces)
-	case *spherev1alpha.Space_MultiBinary:
-		shape = []int{int(s.MultiBinary.N)}
-	case *spherev1alpha.Space_StructSpace:
-		log.Fatalf("struct space not supported")
-	default:
-		log.Fatalf("unknown action space type: %v", space)
-	}
-	if len(shape) == 0 {
-		log.Fatalf("space had no shape: %v", space)
-	}
-	return shape
-}
+// func PotentialsShape(space *spherev1alpha.Space) []int {
+// 	shape := []int{}
+// 	switch s := space.GetInfo().(type) {
+// 	case *spherev1alpha.Space_Box:
+// 		shape = num.I32SliceToI(s.Box.GetShape())
+// 	case *spherev1alpha.Space_Discrete:
+// 		shape = []int{int(s.Discrete.N)}
+// 	case *spherev1alpha.Space_MultiDiscrete:
+// 		shape = num.I32SliceToI(s.MultiDiscrete.DiscreteSpaces)
+// 	case *spherev1alpha.Space_MultiBinary:
+// 		shape = []int{int(s.MultiBinary.N)}
+// 	case *spherev1alpha.Space_StructSpace:
+// 		log.Fatalf("struct space not supported")
+// 	default:
+// 		log.Fatalf("unknown action space type: %v", space)
+// 	}
+// 	if len(shape) == 0 {
+// 		log.Fatalf("space had no shape: %v", space)
+// 	}
+// 	return shape
+// }
 
 // BoxSpace is a helper for box spaces that converts the values to dense tensors.
 // TODO: make proto plugin to do this automagically (protoc-gen-tensor)
-type BoxSpace struct {
-	// High values for this space.
-	High *tensor.Dense
+// type BoxSpace struct {
+// 	// High values for this space.
+// 	High *tensor.Dense
 
-	// Low values for this space.
-	Low *tensor.Dense
+// 	// Low values for this space.
+// 	Low *tensor.Dense
 
-	// Shape of the space.
-	Shape []int
-}
+// 	// Shape of the space.
+// 	Shape []int
+// }
 
 // BoxSpace returns the box space as dense tensors.
-func (e *Env) BoxSpace() (*BoxSpace, error) {
-	space := e.GetObservationSpace()
+// func (e *Env) BoxSpace() (*BoxSpace, error) {
+// 	space := e.GetObservationSpace()
 
-	if sp := space.GetBox(); sp != nil {
-		shape := []int{}
-		for _, i := range sp.GetShape() {
-			shape = append(shape, int(i))
-		}
-		return &BoxSpace{
-			High:  tensor.New(tensor.WithShape(shape...), tensor.WithBacking(sp.GetHigh())),
-			Low:   tensor.New(tensor.WithShape(shape...), tensor.WithBacking(sp.GetLow())),
-			Shape: shape,
-		}, nil
-	}
-	return nil, fmt.Errorf("env is not a box space: %+v", space)
-}
+// 	if sp := space.GetBox(); sp != nil {
+// 		shape := []int{}
+// 		for _, i := range sp.GetShape() {
+// 			shape = append(shape, int(i))
+// 		}
+// 		return &BoxSpace{
+// 			High:  tensor.New(tensor.WithShape(shape...), tensor.WithBacking(sp.GetHigh())),
+// 			Low:   tensor.New(tensor.WithShape(shape...), tensor.WithBacking(sp.GetLow())),
+// 			Shape: shape,
+// 		}, nil
+// 	}
+// 	return nil, fmt.Errorf("env is not a box space: %+v", space)
+// }
 
 // Print a YAML representation of the environment.
-func (e *Env) Print() {
-	e.logger.Infoy("environment", e.Environment)
-}
+// func (e *Env) Print() {
+// 	e.logger.Infoy("environment", e.Environment)
+// }

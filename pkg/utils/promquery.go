@@ -12,6 +12,7 @@ import (
 	"github.com/prometheus/common/model"
 	kv1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
+	"gorgonia.org/tensor"
 )
 
 const (
@@ -45,10 +46,10 @@ func NewPromClient(addr string) (PromClient, error) {
 }
 
 //  获取整个集群中的性能指标
-func (p *promClient) QueryClusterMetrics(filteredNodes []*kv1.Node) (string, error) {
-	metrics := make([][]float64, len(filteredNodes))
+func (p *promClient) QueryClusterMetrics(nodes []*kv1.Node) (*tensor.Dense, error) {
+	metrics := make([][]float64, len(nodes))
 	count := 0
-	for _, node := range filteredNodes {
+	for _, node := range nodes {
 		nodeMetrice, err := p.QueryNodeMetrics(node.Name)
 		if err != nil {
 			return "", err
@@ -56,7 +57,8 @@ func (p *promClient) QueryClusterMetrics(filteredNodes []*kv1.Node) (string, err
 		metrics[count] = nodeMetrice
 		count++
 	}
-	return "", nil
+	state := New(WithBacking(metrics), WithShape(len(filteredNodes), 8))
+	return state, nil
 }
 
 // 根据节点名获取整个节点的性能指标
@@ -65,12 +67,12 @@ func (p *promClient) QueryClusterMetrics(filteredNodes []*kv1.Node) (string, err
 // cpu 和内存使用量中取5分钟内使用的均值
 func (p *promClient) QueryNodeMetrics(nodeName string) ([]float64, error) {
 	nodeMetrics := make([]float64, 8)
-	cpu_usage, err := p.GetCPUUasgeAndUsingMax(nodeName)
+	cpu_usage, err := p.GetCPUUasgeAndRequestMax(nodeName)
 	if err != nil {
 		return nil, err
 	}
 	nodeMetrics[0] = cpu_usage
-	mem_usage, err := p.GetMemUasgeAndUsingMax(nodeName)
+	mem_usage, err := p.GetMemUasgeAndRequestMax(nodeName)
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +113,7 @@ func (p *promClient) QueryNodeMetrics(nodeName string) ([]float64, error) {
 	nodeMetrics[7], _ = strconv.ParseFloat(fs_read_string, 64)
 	return nodeMetrics, nil
 }
-func (p *promClient) GetMemUasgeAndUsingMax(nodeName string) (float64, error) {
+func (p *promClient) GetMemUasgeAndRequestMax(nodeName string) (float64, error) {
 	mem_usage_string, err := p.query("sum(container_memory_working_set_bytes{origin_prometheus=~\"\",container!=\"\",node=\"" + nodeName + "\"})")
 	if err != nil {
 		return -1.0, err
@@ -132,7 +134,7 @@ func (p *promClient) GetMemUasgeAndUsingMax(nodeName string) (float64, error) {
 }
 
 //  获取cpu使用量和申请量中较大的一个
-func (p *promClient) GetCPUUasgeAndUsingMax(nodeName string) (float64, error) {
+func (p *promClient) GetCPUUasgeAndRequestMax(nodeName string) (float64, error) {
 	cpu_usage_string, err := p.query("sum (irate(container_cpu_usage_seconds_total{origin_prometheus=~\"\",container!=\"\",node=\"" + nodeName + "\"}[3m]))")
 	if err != nil {
 		return -1.0, err
@@ -153,20 +155,20 @@ func (p *promClient) GetCPUUasgeAndUsingMax(nodeName string) (float64, error) {
 }
 
 // 获取节点的单个性能指标
-func (p *promClient) QueryByNode(metricName, nodeName string) (string, error) {
-	klog.V(4).Infof("Try to query %s by nodeName %s", metricName, nodeName)
+// func (p *promClient) QueryByNode(metricName, nodeName string) (string, error) {
+// 	klog.V(4).Infof("Try to query %s by nodeName %s", metricName, nodeName)
 
-	querySelector := fmt.Sprintf("sum(%s{origin_prometheus=~\"\",container!=\"\",node=\"%s\"})", metricName, nodeName)
-	fmt.Printf("querySelector ====>%s\n", querySelector)
-	testName := "sum(container_memory_working_set_bytes{origin_prometheus=~\"\",container!=\"\",node=\"node1\"})"
-	fmt.Printf("testName===>%s\n", testName)
-	result, err := p.query(querySelector)
-	if result != "" && err == nil {
-		return result, nil
-	}
+// 	querySelector := fmt.Sprintf("sum(%s{origin_prometheus=~\"\",container!=\"\",node=\"%s\"})", metricName, nodeName)
+// 	fmt.Printf("querySelector ====>%s\n", querySelector)
+// 	testName := "sum(container_memory_working_set_bytes{origin_prometheus=~\"\",container!=\"\",node=\"node1\"})"
+// 	fmt.Printf("testName===>%s\n", testName)
+// 	result, err := p.query(querySelector)
+// 	if result != "" && err == nil {
+// 		return result, nil
+// 	}
 
-	return "", err
-}
+// 	return "", err
+// }
 
 func (p *promClient) query(query string) (string, error) {
 	klog.V(4).Infof("Begin to query prometheus by promQL [%s]...", query)
